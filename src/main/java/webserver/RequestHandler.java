@@ -1,17 +1,22 @@
 package webserver;
 
-import java.io.*;
-import java.net.Socket;
-import java.nio.file.Files;
-
+import model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import util.HttpRequestUtils;
+import util.IOUtils;
+
+import java.io.*;
+import java.net.Socket;
+import java.nio.file.Files;
+import java.util.HashMap;
+import java.util.Map;
 
 public class RequestHandler extends Thread {
     private static final Logger log = LoggerFactory.getLogger(RequestHandler.class);
 
     private Socket connection;
+    private String url;
 
     public RequestHandler(Socket connectionSocket) {
         this.connection = connectionSocket;
@@ -27,14 +32,31 @@ public class RequestHandler extends Thread {
             if (line == null) {
                 return;
             }
+            String url =  HttpRequestUtils.getUrl(line);
+            Map<String,String> headers = new HashMap<>();
+            log.debug("headers: {}",line);
+            while(!line.equals("")) {
+                line = br.readLine();
+                log.debug("headers: {}",line);
+                String[] headerTokens = line.split(": ");
+                if (headerTokens.length == 2) {
+                    headers.put(headerTokens[0], headerTokens[1]);
+                }
+            }
 
-//            while(!line.equals("")) {
-//                line = br.readLine();
-//                log.debug("request: {}",line);
-//            }
+            log.debug("Content-length: {}",headers.get("Content-Length"));
             DataOutputStream dos = new DataOutputStream(out);
-            String path = HttpRequestUtils.getUrl(line);
-            byte[] body = Files.readAllBytes(new File("./webapp"+ path).toPath());
+
+            if (url.startsWith("/user/create")) {
+                String requestBody = IOUtils.readData(br,Integer.parseInt(headers.get("Content-Length")));
+                log.debug("Body: " ,requestBody);
+                Map<String, String> params = HttpRequestUtils.parseQueryString(requestBody);
+
+                User user = new User(params.get("userId"),params.get("password"),params.get("name"),params.get("email"));
+                log.debug("User: {}",user);
+                url = "/index.html";
+            }
+            byte[] body = Files.readAllBytes(new File("./webapp" + url).toPath());
             response200Header(dos, body.length);
             responseBody(dos, body);
 
